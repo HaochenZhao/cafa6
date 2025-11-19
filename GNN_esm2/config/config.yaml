@@ -1,0 +1,63 @@
+# CAFA6 Pairwise模型配置文件（企业级可扩展版本）
+
+# 数据路径
+data:
+  processed_dir: "processed_data_v4"
+  go_embeddings_dir: "go_gnn_results/balanced_fixed"
+
+# ESM2配置
+esm2:
+  model_name: "esm2_t6_8M_UR50D"
+  use_precomputed: true
+  embeddings_file: "./embeddings/embeddings_t6_8M_mean.npz"
+
+# 模型配置
+model:
+  esm_dim: 320
+  go_dim: 256
+  hidden_dims: [512, 256, 128]
+  dropout: 0.3
+  fusion_type: "concat"  # concat, attention, bilinear
+
+# 训练配置
+training:
+  num_epochs: 50
+  batch_size: 512
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  num_workers: 4
+  pin_memory: true
+  seed: 42
+  
+  # 采样策略（企业级）
+  sampling:
+    strategy: "negative_sampling"  # 保留兼容性
+    negative_ratio: 3  # 训练时的负样本比例
+    val_negative_ratio: 1  # 验证时的负样本比例（大幅减少验证时间）
+    sampler_type: "uniform"  # uniform 或 stratified
+  
+  # 优化器
+  optimizer: "adam"
+  scheduler: "cosine"  # cosine, step, none
+  warmup_epochs: 5
+
+# 推理配置
+inference:
+  batch_size: 2048
+  threshold: 0.5
+  
+# 验证配置
+validation:
+  val_frequency: 1  # 每N个epoch验证一次
+  use_batch_eval: true  # 使用批量评估（推荐）
+  eval_chunk_size: 1000  # 批量评估的GO分块大小
+
+# 保存配置
+checkpoints:
+  save_best: true
+  save_last: true
+  monitor: "fmax"  # fmax 或 aupr
+
+# 日志配置
+logging:
+  log_frequency: 100  # 每N个batch打印一次

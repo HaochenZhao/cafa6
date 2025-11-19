@@ -1,0 +1,90 @@
+# CAFA6 GNN+ESM2 配置 - Pairwise模型
+# 模型输入: (sequence_embedding, go_embedding) -> 输出: score
+
+# 数据路径（相对于cafa主目录）
+data:
+  raw_dir: "cafa-6-protein-function-prediction/Train"
+  processed_dir: "processed_data_v4"
+  go_embeddings_dir: "go_gnn_results/balanced_fixed"
+  esm2_embeddings_dir: "embeddings"
+  
+# ESM2配置
+esm2:
+  model_name: "esm2_t6_8M_UR50D"
+  use_precomputed: true
+  embeddings_file: "embeddings/embeddings_t6_8M_mean.npz"
+  
+# GO GNN embeddings
+go_gnn:
+  embedding_dim: 256
+  
+# 模型架构 - Pairwise Scoring
+model:
+  type: "pairwise"  # pairwise scoring模型
+  
+  # ESM2维度映射
+  esm_dim_map:
+    esm2_t6_8M_UR50D: 320
+    esm2_t12_35M_UR50D: 480
+    esm2_t30_150M_UR50D: 640
+    esm2_t33_650M_UR50D: 1280
+  
+  # 融合方式
+  fusion:
+    type: "mlp"  # mlp, bilinear, attention
+    hidden_dims: [512, 256, 128]
+    dropout: 0.3
+    activation: "relu"
+  
+  # 是否使用aspect特定的head
+  use_aspect_specific: false
+  
+# 训练配置
+training:
+  # 采样策略
+  sampling:
+    strategy: "negative_sampling"  # all, negative_sampling, mixed
+    negative_ratio: 3  # 负样本比例（每个正样本配negative_ratio个负样本）
+    
+  batch_size: 512  # 每个batch的(seq, go)对数量
+  num_epochs: 50
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  
+  # 学习率调度
+  scheduler:
+    type: "plateau"
+    patience: 5
+    factor: 0.5
+    min_lr: 0.00001
+  
+  # 早停
+  early_stopping:
+    patience: 10
+    metric: "fmax"
+  
+  # 损失函数
+  loss:
+    type: "bce"  # bce, focal
+    focal_alpha: 0.25
+    focal_gamma: 2.0
+    
+  # 数据加载
+  num_workers: 4
+  pin_memory: true
+  
+  # 保存
+  save_dir: "GNN_esm2/checkpoints"
+  save_every: 5
+
+# 推理配置
+inference:
+  batch_size: 2048  # 推理时可以用更大的batch
+  threshold: 0.5
+  top_k: null  # null表示不限制
+  output_dir: "GNN_esm2/outputs"
+
+# 缓存配置
+cache:
+  cache_dir: "GNN_esm2/cache"
+  use_cache: true

@@ -1,0 +1,59 @@
+cache:
+  cache_dir: GNN_esm2/cache
+  use_cache: true
+data:
+  esm2_embeddings_dir: embeddings
+  go_embeddings_dir: go_gnn_results/balanced_fixed
+  processed_dir: processed_data_v4
+  raw_dir: cafa-6-protein-function-prediction/Train
+esm2:
+  embeddings_file: embeddings/embeddings_t6_8M_mean.npz
+  model_name: esm2_t6_8M_UR50D
+  use_precomputed: true
+go_gnn:
+  embedding_dim: 256
+inference:
+  batch_size: 2048
+  output_dir: GNN_esm2/outputs
+  threshold: 0.5
+  top_k: null
+model:
+  esm_dim_map:
+    esm2_t12_35M_UR50D: 480
+    esm2_t30_150M_UR50D: 640
+    esm2_t33_650M_UR50D: 1280
+    esm2_t6_8M_UR50D: 320
+  fusion:
+    activation: relu
+    dropout: 0.3
+    hidden_dims:
+    - 512
+    - 256
+    - 128
+    type: mlp
+  type: pairwise
+  use_aspect_specific: false
+training:
+  batch_size: 512
+  early_stopping:
+    metric: fmax
+    patience: 10
+  learning_rate: 0.001
+  loss:
+    focal_alpha: 0.25
+    focal_gamma: 2.0
+    type: bce
+  num_epochs: 50
+  num_workers: 4
+  pin_memory: true
+  sampling:
+    negative_ratio: 3
+    strategy: negative_sampling
+  save_dir: GNN_esm2/checkpoints
+  save_every: 5
+  scheduler:
+    factor: 0.5
+    min_lr: 1.0e-05
+    patience: 5
+    type: plateau
+  weight_decay: 0.0001
