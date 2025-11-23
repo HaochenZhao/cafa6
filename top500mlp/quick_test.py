@@ -5,6 +5,10 @@
 
 import torch
 import numpy as np
+
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(current_dir)
+
 from model_three_head_mlp import ThreeHeadMLP
 from dataset import load_cafa6_data, CAFA6Dataset, collate_fn_dynamic
 from torch.utils.data import DataLoader

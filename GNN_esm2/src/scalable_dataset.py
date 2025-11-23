@@ -98,6 +98,45 @@ class StratifiedNegativeSampler(NegativeSampler):
         return samples
 
 
+class HardAwareNegativeSampler(NegativeSampler):
+    """支持困难样本挖掘的采样器"""
+    
+    def __init__(self, all_go_ids: List[str], hard_sample_rate: float = 0.5):
+        self.all_go_ids = all_go_ids
+        self.all_go_set = set(all_go_ids)
+        # 困难样本池: {protein_id: [go_id1, go_id2, ...]}
+        self.hard_negatives = {} 
+        # 有多少概率使用困难样本
+        self.hard_sample_rate = hard_sample_rate 
+
+    def update_hard_negatives(self, new_hard_negatives: Dict[str, List[str]]):
+        """更新困难样本池"""
+        self.hard_negatives = new_hard_negatives
+        print(f"  [Sampler] 更新困难负样本池: 覆盖 {len(self.hard_negatives)} 个蛋白质")
+
+    def sample(self, protein_id: str, positive_gos: set, k: int) -> List[str]:
+        samples = []
+        
+        # 1. 尝试从困难样本池采样
+        hard_candidates = self.hard_negatives.get(protein_id, [])
+        # 过滤掉可能已经变成正样本的（极少见但为了安全）
+        hard_candidates = [go for go in hard_candidates if go not in positive_gos]
+        
+        num_hard = 0
+        if hard_candidates and random.random() < self.hard_sample_rate:
+            # 决定采样多少个困难样本 (例如一半)
+            num_hard = min(len(hard_candidates), k // 2)
+            samples.extend(random.sample(hard_candidates, num_hard))
+            
+        # 2. 剩余的用随机采样补足
+        num_random = k - len(samples)
+        if num_random > 0:
+            negative_pool = list(self.all_go_set - positive_gos - set(samples))
+            if negative_pool:
+                samples.extend(random.sample(negative_pool, min(len(negative_pool), num_random)))
+                
+        return samples
+
 # ============================================================================
 # 可扩展的Iterable数据集
 # ============================================================================

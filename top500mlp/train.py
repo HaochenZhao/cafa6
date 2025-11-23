@@ -14,6 +14,9 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from typing import Dict
 
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(current_dir)
+
 from model_three_head_mlp import ESM2WithThreeHeadMLP, ThreeHeadMLP
 from dataset import create_dataloaders
 from metrics import compute_metrics_per_aspect, print_metrics

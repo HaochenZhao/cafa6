@@ -9,6 +9,9 @@ import torch
 from tqdm import tqdm
 from typing import Dict, List
 
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(current_dir)
+
 from model_three_head_mlp import ThreeHeadMLP, ESM2WithThreeHeadMLP
 from dataset import CAFA6Dataset, collate_fn_precomputed, collate_fn_dynamic
 from torch.utils.data import DataLoader

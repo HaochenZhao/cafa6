@@ -4,6 +4,10 @@
 
 import numpy as np
 import torch
+
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(current_dir)
+
 from model_three_head_mlp import ThreeHeadMLP
 
 
