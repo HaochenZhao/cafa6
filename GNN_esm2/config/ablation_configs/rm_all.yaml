@@ -1,0 +1,80 @@
+# CAFA6 Pairwise模型配置文件 (支持消融实验)
+
+# 数据路径
+data:
+  processed_dir: "processed_data_v4"
+  go_embeddings_dir: "go_gnn_results/balanced_fixed"
+
+# ESM2配置
+esm2:
+  model_name: "esm2_t6_8M_UR50D"
+  use_precomputed: true
+  embeddings_file: "./embeddings/embeddings_t6_8M_mean.npz"
+
+# 模型配置
+model:
+  esm_dim: 320
+  go_dim: 256
+  hidden_dims: [512, 256, 128]
+  dropout: 0.3
+  fusion_type: "concat"  # concat, attention, bilinear
+  
+  # [Ablation] Bias Initialization 开关
+  use_bias_init: false 
+
+# 训练配置
+training:
+  num_epochs: 50
+  batch_size: 1024
+  learning_rate: 0.0005
+  weight_decay: 0.0001
+  num_workers: 2
+  pin_memory: true
+  seed: 42
+  
+  # [Ablation] Loss 配置
+  loss:
+    type: "bce"  # 可选: "focal" 或 "bce"
+    params:
+      alpha: 0.25
+      gamma: 2.0   # 如果 Bias Init 开启，建议设为 2.0；否则尝试 0.0 或 1.0
+
+  # [Ablation] Hard Negative Mining 配置
+  hard_negative_mining:
+    enabled: true
+    start_epoch: 1       # 从第几个 epoch 开始挖掘
+    mining_interval: 1   # 每隔几个 epoch 挖掘一次
+    num_proteins: 2000   # 每次采样多少蛋白质进行挖掘
+    threshold: 0.05      # 挖掘阈值 (大于此值的负样本被视为困难样本)
+    hard_sample_rate: 0.5 # 采样时有多大概率使用困难样本池
+
+  # 基础采样策略
+  sampling:
+    strategy: "negative_sampling"
+    negative_ratio: 10
+    val_negative_ratio: 16
+    sampler_type: "uniform" 
+  
+  optimizer: "adam"
+  scheduler: "cosine"
+  warmup_epochs: 5
+
+# 推理配置
+inference:
+  batch_size: 2048
+  threshold: 0.5
+  
+# 验证配置
+validation:
+  val_frequency: 1
+  use_batch_eval: true
+  eval_chunk_size: 1280
+
+# 保存配置
+checkpoints:
+  save_best: true
+  save_last: true
+  monitor: "fmax"
+
+logging:
+  log_frequency: 100

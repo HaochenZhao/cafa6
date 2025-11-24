@@ -1,10 +1,10 @@
 """
-Pairwise评分模型 (修改版: 优化权重初始化)
+Pairwise评分模型 (支持 LayerNorm + 可配置 Bias Initialization)
 """
 
 import torch
 import torch.nn as nn
-import math  # [新增]
+import math
 from typing import List
 
 
@@ -22,13 +22,15 @@ class PairwiseScorer(nn.Module):
         go_dim: int = 256,
         hidden_dims: List[int] = [512, 256, 128],
         dropout: float = 0.3,
-        fusion_type: str = "concat"
+        fusion_type: str = "concat",
+        use_bias_init: bool = True  # [Ablation] 控制 Bias Init
     ):
         super().__init__()
         
         self.fusion_type = fusion_type
+        self.use_bias_init = use_bias_init
         
-        # 融合层
+        # 1. 定义融合层
         if fusion_type == "concat":
             fusion_dim = esm_dim + go_dim
         elif fusion_type == "attention":
@@ -44,7 +46,11 @@ class PairwiseScorer(nn.Module):
         else:
             raise ValueError(f"不支持的融合类型: {fusion_type}")
         
-        # MLP
+        # [关键] LayerNorm 层
+        # 在送入MLP之前进行归一化，确保特征值分布稳定
+        self.layernorm = nn.LayerNorm(fusion_dim)
+        
+        # 2. 构建 MLP
         layers = []
         in_dim = fusion_dim
         
@@ -56,51 +62,51 @@ class PairwiseScorer(nn.Module):
             ])
             in_dim = hidden_dim
         
-        # 输出层
-        # [注意] 最后一层是 Linear，直接输出 Logits，没有 Sigmoid
+        # 输出层 (Linear, 无 Sigmoid)
         layers.append(nn.Linear(in_dim, 1))
         
         self.mlp = nn.Sequential(*layers)
 
-        # [新增] 执行自定义初始化
+        # 3. 执行初始化
         self._init_weights()
     
     def _init_weights(self):
         """
-        自定义初始化策略：
-        1. 隐藏层：Kaiming 初始化 (适合 ReLU)
-        2. 输出层：Prior Bias 初始化 (适合极度不平衡数据)
+        权重初始化策略
         """
         for m in self.modules():
             if isinstance(m, nn.Linear):
-                # 对所有 Linear 层使用 Kaiming Normal
+                # 默认使用 Kaiming Normal
                 nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
                 if m.bias is not None:
                     nn.init.constant_(m.bias, 0)
         
-        # === 特殊处理输出层 ===
-        # 找到 MLP 的最后一层 (Linear)
-        # 这里的 -1 是因为最后一层就是 Linear (没有 Sigmoid)
-        last_layer = self.mlp[-1]
-        
-        if isinstance(last_layer, nn.Linear):
-            # 设定先验概率 pi = 0.01 (即假设正样本只有 1%)
-            # 对于 CAFA 这种 1:3000 的数据，0.01 是一个比较安全的起点，既压低了分数，又保留了梯度
-            prior_prob = 0.01
-            bias_value = -math.log((1 - prior_prob) / prior_prob)
-            
-            # 初始化 Bias
-            nn.init.constant_(last_layer.bias, bias_value)
-            
-            # 将权重初始化得非常小，确保初始输出主要由 Bias 决定
-            nn.init.normal_(last_layer.weight, std=0.01)
-            
-            print(f"✓ 模型初始化完成: 输出层 Bias 设为 {bias_value:.4f} (Prior={prior_prob})")
+        # [Ablation] Bias Initialization
+        if self.use_bias_init:
+            last_layer = self.mlp[-1]
+            if isinstance(last_layer, nn.Linear):
+                # 设定先验概率 pi = 0.01 (即假设正样本只有 1%)
+                prior_prob = 0.01
+                bias_value = -math.log((1 - prior_prob) / prior_prob)
+                
+                # 初始化 Bias 为负值
+                nn.init.constant_(last_layer.bias, bias_value)
+                # 初始化 Weight 为极小值
+                nn.init.normal_(last_layer.weight, std=0.01)
+                
+                print(f"✓ [Model] Bias Initialization 启用: Bias={bias_value:.4f} (Prior={prior_prob})")
+        else:
+            print("✓ [Model] Bias Initialization 禁用 (使用标准初始化)")
 
     def forward(self, protein_embs: torch.Tensor, go_embs: torch.Tensor) -> torch.Tensor:
-        # 融合
+        """
+        前向传播
+        返回 Logits (未经过 Sigmoid)
+        """
+        # 1. 特征融合
         if self.fusion_type == "concat":
             fused = torch.cat([protein_embs, go_embs], dim=-1)
+            
         elif self.fusion_type == "attention":
             protein_attended, _ = self.attention(
                 protein_embs.unsqueeze(1),
@@ -108,14 +114,19 @@ class PairwiseScorer(nn.Module):
                 go_embs.unsqueeze(1)
             )
             fused = torch.cat([protein_attended.squeeze(1), go_embs], dim=-1)
+            
         elif self.fusion_type == "bilinear":
             fused = self.bilinear(protein_embs, go_embs)
         
-        # MLP
+        # 2. [关键] LayerNorm 归一化
+        fused = self.layernorm(fused)
+        
+        # 3. MLP 预测
         scores = self.mlp(fused).squeeze(-1)
         
         return scores
 
     def predict(self, protein_embs: torch.Tensor, go_embs: torch.Tensor) -> torch.Tensor:
+        """预测概率 (0-1)"""
         logits = self.forward(protein_embs, go_embs)
         return torch.sigmoid(logits)
