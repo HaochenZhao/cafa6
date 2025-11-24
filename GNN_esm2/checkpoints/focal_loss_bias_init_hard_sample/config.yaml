@@ -27,8 +27,8 @@ training:
   batch_size: 1024
   learning_rate: 0.0005
   loss:
-    alpha: 0.75
-    gamma: 1.0
+    alpha: 0.25
+    gamma: 3.0
   num_epochs: 50
   num_workers: 2
   optimizer: adam
